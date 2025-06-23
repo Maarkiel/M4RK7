@@ -75,28 +75,27 @@ class KartotekaButtons(discord.ui.View):
         self.user = user
 
     @discord.ui.button(label="Kartoteka", style=discord.ButtonStyle.primary)
-    async def kartoteka_button(self, interaction, button):
+    async def kartoteka_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         c.execute("SELECT action_type, reason, moderator, timestamp FROM actions WHERE user_id = ? ORDER BY timestamp DESC", (str(self.user.id),))
         records = c.fetchall()
         if not records:
             msg = "Brak historii."
         else:
             msg = "\n".join([f"[{r[3]}] {r[0].upper()} - {r[2]}: {r[1]}" for r in records])
-        await interaction.response.send_message(f"Historia dla {self.user.mention}:
-```{msg}```", ephemeral=True)
+        await interaction.response.send_message(f"Historia dla {self.user.mention}:\n```{msg}```", ephemeral=True)
 
     @discord.ui.button(label="Ostrzeż", style=discord.ButtonStyle.danger)
-    async def warn_button(self, interaction, button):
+    async def warn_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         modal = WarnModal(self.user)
         await interaction.response.send_modal(modal)
 
     @discord.ui.button(label="Zbanuj", style=discord.ButtonStyle.danger)
-    async def ban_button(self, interaction, button):
+    async def ban_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         modal = BanModal(self.user)
         await interaction.response.send_modal(modal)
 
     @discord.ui.button(label="Zamknij", style=discord.ButtonStyle.secondary)
-    async def close_button(self, interaction, button):
+    async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.message.delete()
 
 class WarnModal(discord.ui.Modal, title="Ostrzeż użytkownika"):
@@ -117,14 +116,20 @@ class WarnModal(discord.ui.Modal, title="Ostrzeż użytkownika"):
                   (user_id, "warn", self.reason.value, str(interaction.user)))
         conn.commit()
 
-        await interaction.response.send_message(f"{self.user.mention} został ostrzeżony. Powód: {self.reason}", ephemeral=True)
+        await interaction.response.send_message(f"{self.user.mention} został ostrzeżony. Powód: {self.reason.value}", ephemeral=True)
 
         if warns in [2, 5]:
-            await interaction.guild.timeout(self.user, reason="Automatyczny mute")
+            try:
+                await interaction.guild.timeout(self.user, duration=60*60*24*3, reason="Automatyczny mute za ostrzeżenia")
+            except Exception as e:
+                print(f"Błąd podczas mutowania: {e}")
             c.execute("INSERT INTO actions (user_id, action_type, reason, moderator) VALUES (?, ?, ?, ?)",
                       (user_id, "mute", "Automatyczny mute za ostrzeżenia", str(interaction.user)))
         elif warns in [3, 6]:
-            await interaction.guild.ban(self.user, reason="Automatyczny ban za ostrzeżenia")
+            try:
+                await interaction.guild.ban(self.user, reason="Automatyczny ban za ostrzeżenia")
+            except Exception as e:
+                print(f"Błąd podczas bana: {e}")
             c.execute("INSERT INTO actions (user_id, action_type, reason, moderator) VALUES (?, ?, ?, ?)",
                       (user_id, "ban", "Automatyczny ban za ostrzeżenia", str(interaction.user)))
         conn.commit()
@@ -139,10 +144,14 @@ class BanModal(discord.ui.Modal, title="Zbanuj użytkownika"):
     async def on_submit(self, interaction: discord.Interaction):
         try:
             await self.user.send(f"Zostałeś zbanowany przez {interaction.user.mention}. Powód: {self.reason.value}")
-        except:
+        except Exception:
             pass
 
-        await interaction.guild.ban(self.user, reason=self.reason.value)
+        try:
+            await interaction.guild.ban(self.user, reason=self.reason.value)
+        except Exception as e:
+            print(f"Błąd podczas bana: {e}")
+
         user_id = str(self.user.id)
         c.execute("INSERT INTO actions (user_id, action_type, reason, moderator) VALUES (?, ?, ?, ?)",
                   (user_id, "ban", self.reason.value, str(interaction.user)))
@@ -165,11 +174,17 @@ async def warn(interaction: discord.Interaction, user: discord.Member, reason: s
     await interaction.response.send_message(f"{user.mention} otrzymał ostrzeżenie: {reason}", ephemeral=True)
 
     if warns in [2, 5]:
-        await interaction.guild.timeout(user, reason="Automatyczny mute za ostrzeżenia")
+        try:
+            await interaction.guild.timeout(user, duration=60*60*24*3, reason="Automatyczny mute za ostrzeżenia")
+        except Exception as e:
+            print(f"Błąd podczas mutowania: {e}")
         c.execute("INSERT INTO actions (user_id, action_type, reason, moderator) VALUES (?, ?, ?, ?)",
                   (user_id, "mute", "Automatyczny mute", str(interaction.user)))
     elif warns in [3, 6]:
-        await interaction.guild.ban(user, reason="Automatyczny ban za ostrzeżenia")
+        try:
+            await interaction.guild.ban(user, reason="Automatyczny ban za ostrzeżenia")
+        except Exception as e:
+            print(f"Błąd podczas bana: {e}")
         c.execute("INSERT INTO actions (user_id, action_type, reason, moderator) VALUES (?, ?, ?, ?)",
                   (user_id, "ban", "Automatyczny ban", str(interaction.user)))
     conn.commit()
@@ -178,9 +193,12 @@ async def warn(interaction: discord.Interaction, user: discord.Member, reason: s
 async def ban(interaction: discord.Interaction, user: discord.Member, reason: str):
     try:
         await user.send(f"Zostałeś zbanowany przez {interaction.user.mention}. Powód: {reason}")
-    except:
+    except Exception:
         pass
-    await interaction.guild.ban(user, reason=reason)
+    try:
+        await interaction.guild.ban(user, reason=reason)
+    except Exception as e:
+        print(f"Błąd podczas bana: {e}")
     c.execute("INSERT INTO actions (user_id, action_type, reason, moderator) VALUES (?, ?, ?, ?)",
               (str(user.id), "ban", reason, str(interaction.user)))
     conn.commit()
@@ -188,7 +206,11 @@ async def ban(interaction: discord.Interaction, user: discord.Member, reason: st
 
 @tree.command(name="mute", description="Wycisza użytkownika")
 async def mute(interaction: discord.Interaction, user: discord.Member, time: str):
-    await interaction.guild.timeout(user, reason="Mute komendą", duration=60*60*24*3)
+    # W tym miejscu zawsze mute na 3 dni (możesz dodać parsowanie `time` jeśli chcesz)
+    try:
+        await interaction.guild.timeout(user, duration=60*60*24*3, reason=f"Mute komendą ({time})")
+    except Exception as e:
+        print(f"Błąd podczas mutowania: {e}")
     c.execute("INSERT INTO actions (user_id, action_type, reason, moderator) VALUES (?, ?, ?, ?)",
               (str(user.id), "mute", f"Wyciszenie na 3 dni ({time})", str(interaction.user)))
     conn.commit()
