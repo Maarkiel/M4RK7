@@ -1,29 +1,32 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-import json
 import os
 import sqlite3
 from dotenv import load_dotenv
 
+# Wczytaj zmienne środowiskowe z pliku .env
 load_dotenv()
+TOKEN = os.getenv("DISCORD_TOKEN")
+if not TOKEN:
+    raise ValueError("❌ Nie znaleziono DISCORD_TOKEN w pliku .env!")
 
+# Intencje
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="/", intents=intents)
 tree = bot.tree
 
-# Połączenie z bazą danych SQLite
+# Połączenie z bazą danych
 conn = sqlite3.connect("user_data.db")
 c = conn.cursor()
 
-# Tworzenie tabeli jeśli nie istnieje
+# Tabele w bazie
 c.execute("""
 CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
     warns INTEGER DEFAULT 0
 )
 """)
-
 c.execute("""
 CREATE TABLE IF NOT EXISTS actions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,14 +39,18 @@ CREATE TABLE IF NOT EXISTS actions (
 """)
 conn.commit()
 
+# ----------------------
+# EVENTY I KOMENDY
+# ----------------------
+
 @bot.event
 async def on_ready():
-    print(f"Zalogowano jako {bot.user} (ID: {bot.user.id})")
+    print(f"✅ Zalogowano jako: {bot.user} (ID: {bot.user.id})")
     try:
         synced = await tree.sync()
-        print(f"Zsynchronizowano {len(synced)} komend slash")
+        print(f"✅ Zsynchronizowano {len(synced)} komend slash.")
     except Exception as e:
-        print(e)
+        print(f"❌ Błąd synchronizacji komend: {e}")
 
 @tree.command(name="kartoteka", description="Zarządzanie użytkownikiem")
 @app_commands.describe(username="Użytkownik do przeglądu")
@@ -206,7 +213,6 @@ async def ban(interaction: discord.Interaction, user: discord.Member, reason: st
 
 @tree.command(name="mute", description="Wycisza użytkownika")
 async def mute(interaction: discord.Interaction, user: discord.Member, time: str):
-    # W tym miejscu zawsze mute na 3 dni (możesz dodać parsowanie `time` jeśli chcesz)
     try:
         await interaction.guild.timeout(user, duration=60*60*24*3, reason=f"Mute komendą ({time})")
     except Exception as e:
@@ -216,4 +222,5 @@ async def mute(interaction: discord.Interaction, user: discord.Member, time: str
     conn.commit()
     await interaction.response.send_message(f"{user.mention} został wyciszony na 3 dni.", ephemeral=True)
 
-bot.run(os.getenv("DISCORD_TOKEN"))
+# Uruchomienie bota
+bot.run(TOKEN)
