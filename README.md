@@ -12,5 +12,5 @@ Prototyp bota do zarządzania serwerem Discord:
 
 1. Sklonuj repozytorium:
    ```bash
-   git clone https://github.com/TwojNick/m4rk7-bot.git
+   git clone https://github.com/Maarkiel/m4rk7-bot.git
    cd m4rk7-bot
