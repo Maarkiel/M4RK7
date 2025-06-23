@@ -224,3 +224,5 @@ async def mute(interaction: discord.Interaction, user: discord.Member, time: str
 
 # Uruchomienie bota
 bot.run(TOKEN)
+print(f"Token from env: {TOKEN[:10]}...")  # Wyświetli pierwsze 10 znaków tokena
+
